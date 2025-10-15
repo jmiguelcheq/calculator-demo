@@ -14,7 +14,7 @@ jobs:
     env:
       OWNER: jmiguelcheq
       TESTING_REPO: calculator-test-demo
-      CALC_URL: ${{ vars.CALC_URL || secrets.CALC_URL || '' }}
+      CALC_URL: ${{ vars.CALC_URL || secrets.CALC_URL || 'https://jmiguelcheq.github.io/calculator-demo' }}
     steps:
       - name: Send repository_dispatch to Repo B
         run: |
