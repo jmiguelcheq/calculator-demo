@@ -1,0 +1,36 @@
+name: Notify testing repo on changes
+
+on:
+  push:
+    branches: [ main ]     # adjust as needed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    env:
+      OWNER: jmiguelcheq
+      TESTING_REPO: calculator-test-demo
+      CALC_URL: ${{ vars.CALC_URL || secrets.CALC_URL || '' }}
+    steps:
+      - name: Send repository_dispatch to Repo B
+        run: |
+          set -e
+          EVENT_TYPE="run-tests"
+          PAYLOAD=$(jq -n \
+            --arg sha "${GITHUB_SHA}" \
+            --arg ref "${GITHUB_REF_NAME}" \
+            --arg repo "${{ github.repository }}" \
+            --arg calc "${CALC_URL}" \
+            '{event_type:$ENV.EVENT_TYPE,
+              client_payload:{ sha:$sha, ref:$ref, source_repo:$repo, calc_url:$calc }}' \
+            --argjson ENV '{"EVENT_TYPE":"run-tests"}')
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.DISPATCH_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${OWNER}/${TESTING_REPO}/dispatches \
+            -d "$PAYLOAD"
