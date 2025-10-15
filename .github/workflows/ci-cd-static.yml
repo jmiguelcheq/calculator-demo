@@ -1,0 +1,65 @@
+name: Static Site CI/CD (Staging Preview → Production)
+
+on:
+  pull_request:
+    branches: [ "main" ]     # PRs to main = staging preview
+  push:
+    branches: [ "main" ]     # Merge to main = production deploy
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write              # ⬅ needed to dispatch another workflow
+
+concurrency:
+  group: "pages-deploy"
+  cancel-in-progress: true
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # (Optional) Add build steps if you have any
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: "20" }
+      # - run: npm ci && npm run build
+
+      - name: Upload Pages artifact (static site)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: src    # ⬅ your static folder
+
+  deploy_staging:
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      preview_url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages (Staging)
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      # 🔔 Trigger your notify workflow with the preview URL
+      - name: Trigger notify-testing workflow
+        uses: peter-evans/workflow-dispatch@v3
+        with:
+          repository: ${{ github.repository }}
+          workflow: "notify-testing.yml"
+          ref: ${{ github.ref_name }}
+          inputs:
+            staging_url: ${{ steps.deploy.outputs.page_url }}
+
+  approve_and_deploy_prod:
+    needs: deploy_staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production            # add approvers in Settings → Environments → production
+      url: ${{ needs.deploy_staging.outputs.preview_url }}
+    steps:
+      - name: Deploy to GitHub Pages (Production)
+        uses: actions/deploy-pages@v4

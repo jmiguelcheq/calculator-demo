@@ -87,3 +87,19 @@ jobs:
           if [ "$STATUS" != "204" ]; then
             echo "repository_dispatch failed"; exit 1
           fi
+
+name: Notify Testing
+on:
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: "Staging preview URL"
+        required: true
+        type: string
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show URL
+        run: echo "Staging is ready at: ${{ github.event.inputs.staging_url }}"
