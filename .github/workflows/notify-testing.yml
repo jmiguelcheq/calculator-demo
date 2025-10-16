@@ -16,4 +16,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Show URL
-        run: echo "Staging is ready at: ${{ github.event.inputs.staging_url }}"
+        run: |
+          echo "Staging is ready at: ${{ github.event.inputs.staging_url }}"

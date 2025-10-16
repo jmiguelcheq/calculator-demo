@@ -23,11 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (Optional) build step if needed
-      # - uses: actions/setup-node@v4
-      #   with: { node-version: "20" }
-      # - run: npm ci && npm run build
-
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
@@ -53,7 +48,7 @@ jobs:
           workflow: "notify-testing.yml"
           ref: ${{ github.ref_name }}
           inputs:
-            staging_url: ${{ env.STAGING_URL }}
+            staging_url: "${{ env.STAGING_URL }}"
 
   approve_and_deploy_prod:
     needs: deploy_staging
