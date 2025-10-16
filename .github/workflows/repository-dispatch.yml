@@ -1,4 +1,4 @@
-name: Notify testing repo on changes
+name: Notify Test Automation That Code Changed
 
 on:
   push:
