@@ -2,7 +2,7 @@ name: Notify testing repo on changes
 
 on:
   push:
-    branches: [ main ]     # adjust as needed
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
