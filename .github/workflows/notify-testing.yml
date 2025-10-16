@@ -1,4 +1,4 @@
-name: Notify Testing
+name: Notify QA for Staging Deployment
 
 on:
   workflow_dispatch:

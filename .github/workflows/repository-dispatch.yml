@@ -15,7 +15,7 @@ jobs:
     env:
       OWNER: jmiguelcheq
       TESTING_REPO: calculator-test-demo
-      CALC_URL: ${{ vars.CALC_URL || secrets.CALC_URL || 'https://jmiguelcheq.github.io/calculator-demo' }}
+      CALC_URL: ${{ vars.CALC_URL || secrets.CALC_URL || '' }}
 
     steps:
       - name: Show context (debug)
