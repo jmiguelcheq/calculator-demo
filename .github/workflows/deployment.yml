@@ -65,7 +65,7 @@
 #         uses: actions/deploy-pages@v4
 
 
-name: Staging + Production Deploy (Need Approval, gated by remote tests)
+name: Staging + Production Deploy (gated by remote tests via repository_dispatch)
 
 on:
   pull_request:
@@ -90,69 +90,72 @@ jobs:
     name: Run tests in testing repo and wait
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger testing repo workflow_dispatch
+      - name: Send repository_dispatch to testing repo
         uses: actions/github-script@v7
         env:
           TARGET_OWNER: "jmiguelcheq"
-          TARGET_REPO: "calculator-test-demo"     # <-- your testing repo
+          TARGET_REPO: "calculator-test-demo"  # testing repo
           CALC_URL: "https://jmiguelcheq.github.io/calculator-demo"
         with:
-          # ⬇️ MUST be a PAT secret with scopes: repo, workflow (not the default GITHUB_TOKEN)
+          # PAT secret with scopes: repo, workflow (must have access to testing repo)
           github-token: ${{ secrets.CI_PAT }}
           script: |
             const { TARGET_OWNER, TARGET_REPO, CALC_URL } = process.env;
-            const ref = context.ref.replace('refs/heads/', ''); // e.g., "main"
-            await github.rest.actions.createWorkflowDispatch({
+            const ref = context.ref.replace('refs/heads/', '');
+            const payload = {
+              calc_url: CALC_URL,
+              source_repo: `${context.repo.owner}/${context.repo.repo}`,
+              sha: context.sha,
+              ref
+            };
+            await github.rest.repos.createDispatchEvent({
               owner: TARGET_OWNER,
               repo: TARGET_REPO,
-              workflow_id: 'on-dispatch-tests.yml', // file in testing repo
-              ref,
-              inputs: { calc_url: CALC_URL }
+              event_type: 'run-tests',
+              client_payload: payload
             });
-            core.info(`Dispatched tests to ${TARGET_OWNER}/${TARGET_REPO}@${ref}`);
+            core.info(`repository_dispatch sent to ${TARGET_OWNER}/${TARGET_REPO} with payload: ${JSON.stringify(payload)}`);
 
-      - name: Wait for testing repo run to finish
+      - name: Wait for testing repo run to complete
         uses: actions/github-script@v7
         env:
           TARGET_OWNER: "jmiguelcheq"
           TARGET_REPO: "calculator-test-demo"
         with:
-          github-token: ${{ secrets.CI_PAT }}   # same PAT
+          github-token: ${{ secrets.CI_PAT }}
           script: |
             const { TARGET_OWNER, TARGET_REPO } = process.env;
-            const workflow_id = 'on-dispatch-tests.yml';
-            const ref = context.ref.replace('refs/heads/', '');
-            const deadline = Date.now() + 20 * 60 * 1000; // 20 min timeout
-            let runId = null;
+            const workflow_id = 'on-dispatch-tests.yml';   // file name in testing repo
+            const deadline = Date.now() + 20 * 60 * 1000;  // 20 min timeout
 
-            // Find the most recent run we just triggered (workflow_dispatch on this ref)
+            // Find the newest run for repository_dispatch
+            let runId = null;
             while (Date.now() < deadline) {
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner: TARGET_OWNER,
                 repo: TARGET_REPO,
                 workflow_id,
-                event: 'workflow_dispatch',
-                branch: ref,
-                per_page: 5,
+                event: 'repository_dispatch',
+                per_page: 10
               });
               if (runs.data.total_count > 0) {
-                runId = runs.data.workflow_runs[0].id;
-                core.info(`Found run: ${runId}`);
+                runId = runs.data.workflow_runs[0].id; // most recent
+                core.info(`Found testing run id: ${runId}`);
                 break;
               }
               await new Promise(r => setTimeout(r, 5000));
             }
-            if (!runId) core.setFailed('Could not find dispatched test run.');
+            if (!runId) core.setFailed('Could not find dispatched testing workflow run.');
 
-            // Wait for completion
+            // Poll until completed
             while (Date.now() < deadline) {
               const { data: run } = await github.rest.actions.getWorkflowRun({
                 owner: TARGET_OWNER, repo: TARGET_REPO, run_id: runId
               });
-              core.info(`Status: ${run.status}, Conclusion: ${run.conclusion}`);
+              core.info(`Testing run status=${run.status}, conclusion=${run.conclusion}`);
               if (run.status === 'completed') {
                 if (run.conclusion !== 'success') {
-                  core.setFailed(`Tests failed: ${run.conclusion}`);
+                  core.setFailed(`Remote tests failed: ${run.conclusion}`);
                 }
                 break;
               }
@@ -165,13 +168,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # (add build steps if you have any)
+      # (add build steps if your site is generated)
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: src   # static folder
+          path: src  # your static folder
 
-  # 2) Deploy to staging (auto) only if package succeeded
+  # 2) Deploy to staging
   deploy_staging:
     needs: package_site
     runs-on: ubuntu-latest
@@ -188,7 +191,7 @@ jobs:
     needs: deploy_staging
     runs-on: ubuntu-latest
     environment:
-      name: production         # add approvers in Settings → Environments → production
+      name: production        # add approvers in Settings → Environments → production
       url: ${{ needs.deploy_staging.outputs.preview_url }}
     steps:
       - name: Deploy to GitHub Pages (Production)
