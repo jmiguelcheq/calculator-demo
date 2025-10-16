@@ -48,7 +48,7 @@ jobs:
           workflow: "notify-testing.yml"
           ref: ${{ github.ref_name }}
           inputs:
-            staging_url: "${{ env.STAGING_URL }}"
+          staging_url: "${{ env.STAGING_URL }}"
 
   approve_and_deploy_prod:
     needs: deploy_staging
