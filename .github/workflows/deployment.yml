@@ -1,4 +1,71 @@
-name: Staging + Production Deploy (Need Approval)
+# name: Staging + Production Deploy (Need Approval)
+
+# on:
+#   pull_request:
+#     branches: [ "main" ]
+#   push:
+#     branches: [ "main" ]
+#   workflow_dispatch: {}
+
+# permissions:
+#   contents: read
+#   pages: write
+#   id-token: write
+#   actions: write     # needed to dispatch another workflow in the same repo
+
+# concurrency:
+#   group: "pages-deploy"
+#   cancel-in-progress: true
+
+# jobs:
+#   build_and_test:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#       - name: Upload Pages artifact (static site)
+#         uses: actions/upload-pages-artifact@v3
+#         with:
+#           path: src
+
+#   deploy_staging:
+#     needs: build_and_test
+#     runs-on: ubuntu-latest
+#     environment: staging
+#     outputs:
+#       preview_url: ${{ steps.deploy.outputs.page_url }}
+#     steps:
+#       - name: Deploy to GitHub Pages (Staging)
+#         id: deploy
+#         uses: actions/deploy-pages@v4
+
+#       - name: Trigger notify-testing workflow
+#         uses: actions/github-script@v7
+#         env:
+#           STAGING_URL: ${{ steps.deploy.outputs.page_url }}
+#         with:
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           script: |
+#             const ref = context.ref.replace('refs/heads/', '');
+#             await github.rest.actions.createWorkflowDispatch({
+#               owner: context.repo.owner,
+#               repo: context.repo.repo,
+#               workflow_id: 'notify-testing.yml',
+#               ref,
+#               inputs: { staging_url: process.env.STAGING_URL }
+#             });
+
+#   approve_and_deploy_prod:
+#     needs: deploy_staging
+#     runs-on: ubuntu-latest
+#     environment:
+#       name: production
+#       url: ${{ needs.deploy_staging.outputs.preview_url }}
+#     steps:
+#       - name: Deploy to GitHub Pages (Production)
+#         uses: actions/deploy-pages@v4
+
+
+name: Staging + Production Deploy (Need Approval, gated by remote tests)
 
 on:
   pull_request:
@@ -11,24 +78,102 @@ permissions:
   contents: read
   pages: write
   id-token: write
-  actions: write     # needed to dispatch another workflow in the same repo
+  actions: write
 
 concurrency:
   group: "pages-deploy"
   cancel-in-progress: true
 
 jobs:
-  build_and_test:
+  # 0) Gate: run tests in testing repo and WAIT for result
+  remote_tests:
+    name: Run tests in testing repo and wait
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger testing repo workflow_dispatch
+        uses: actions/github-script@v7
+        env:
+          TARGET_OWNER: "jmiguelcheq"
+          TARGET_REPO: "calculator-test-demo"     # <-- your testing repo
+          CALC_URL: "https://jmiguelcheq.github.io/calculator-demo"
+        with:
+          # ⬇️ MUST be a PAT secret with scopes: repo, workflow (not the default GITHUB_TOKEN)
+          github-token: ${{ secrets.CI_PAT }}
+          script: |
+            const { TARGET_OWNER, TARGET_REPO, CALC_URL } = process.env;
+            const ref = context.ref.replace('refs/heads/', ''); // e.g., "main"
+            await github.rest.actions.createWorkflowDispatch({
+              owner: TARGET_OWNER,
+              repo: TARGET_REPO,
+              workflow_id: 'on-dispatch-tests.yml', // file in testing repo
+              ref,
+              inputs: { calc_url: CALC_URL }
+            });
+            core.info(`Dispatched tests to ${TARGET_OWNER}/${TARGET_REPO}@${ref}`);
+
+      - name: Wait for testing repo run to finish
+        uses: actions/github-script@v7
+        env:
+          TARGET_OWNER: "jmiguelcheq"
+          TARGET_REPO: "calculator-test-demo"
+        with:
+          github-token: ${{ secrets.CI_PAT }}   # same PAT
+          script: |
+            const { TARGET_OWNER, TARGET_REPO } = process.env;
+            const workflow_id = 'on-dispatch-tests.yml';
+            const ref = context.ref.replace('refs/heads/', '');
+            const deadline = Date.now() + 20 * 60 * 1000; // 20 min timeout
+            let runId = null;
+
+            // Find the most recent run we just triggered (workflow_dispatch on this ref)
+            while (Date.now() < deadline) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: TARGET_OWNER,
+                repo: TARGET_REPO,
+                workflow_id,
+                event: 'workflow_dispatch',
+                branch: ref,
+                per_page: 5,
+              });
+              if (runs.data.total_count > 0) {
+                runId = runs.data.workflow_runs[0].id;
+                core.info(`Found run: ${runId}`);
+                break;
+              }
+              await new Promise(r => setTimeout(r, 5000));
+            }
+            if (!runId) core.setFailed('Could not find dispatched test run.');
+
+            // Wait for completion
+            while (Date.now() < deadline) {
+              const { data: run } = await github.rest.actions.getWorkflowRun({
+                owner: TARGET_OWNER, repo: TARGET_REPO, run_id: runId
+              });
+              core.info(`Status: ${run.status}, Conclusion: ${run.conclusion}`);
+              if (run.status === 'completed') {
+                if (run.conclusion !== 'success') {
+                  core.setFailed(`Tests failed: ${run.conclusion}`);
+                }
+                break;
+              }
+              await new Promise(r => setTimeout(r, 10000));
+            }
+
+  # 1) Package site (only if remote tests succeeded)
+  package_site:
+    needs: remote_tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # (add build steps if you have any)
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: src
+          path: src   # static folder
 
+  # 2) Deploy to staging (auto) only if package succeeded
   deploy_staging:
-    needs: build_and_test
+    needs: package_site
     runs-on: ubuntu-latest
     environment: staging
     outputs:
@@ -38,28 +183,14 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
-      - name: Trigger notify-testing workflow
-        uses: actions/github-script@v7
-        env:
-          STAGING_URL: ${{ steps.deploy.outputs.page_url }}
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ref = context.ref.replace('refs/heads/', '');
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'notify-testing.yml',
-              ref,
-              inputs: { staging_url: process.env.STAGING_URL }
-            });
-
+  # 3) Manual approval gate, then promote same artifact to prod
   approve_and_deploy_prod:
     needs: deploy_staging
     runs-on: ubuntu-latest
     environment:
-      name: production
+      name: production         # add approvers in Settings → Environments → production
       url: ${{ needs.deploy_staging.outputs.preview_url }}
     steps:
       - name: Deploy to GitHub Pages (Production)
         uses: actions/deploy-pages@v4
+
