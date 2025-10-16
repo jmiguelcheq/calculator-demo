@@ -2,9 +2,9 @@ name: Static Site CI/CD (Staging Preview → Production)
 
 on:
   pull_request:
-    branches: [ "main" ]     # PRs to main = staging preview
+    branches: [ "main" ]
   push:
-    branches: [ "main" ]     # Merge to main = production deploy
+    branches: [ "main" ]
   workflow_dispatch: {}
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (Optional) Add build/verify here if needed
+      # (Optional) build step if needed
       # - uses: actions/setup-node@v4
       #   with: { node-version: "20" }
       # - run: npm ci && npm run build
@@ -31,31 +31,29 @@ jobs:
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: src    # ⬅ your static folder
+          path: src
 
   deploy_staging:
     needs: build_and_test
     runs-on: ubuntu-latest
     environment: staging
-
-    # ✅ Job outputs must be defined at job level
     outputs:
       preview_url: ${{ steps.deploy.outputs.page_url }}
-
     steps:
       - name: Deploy to GitHub Pages (Staging)
         id: deploy
         uses: actions/deploy-pages@v4
 
-      # 🔔 Trigger your notify workflow with the preview URL
       - name: Trigger notify-testing workflow
         uses: peter-evans/workflow-dispatch@v3
+        env:
+          STAGING_URL: ${{ steps.deploy.outputs.page_url }}
         with:
           repository: ${{ github.repository }}
           workflow: "notify-testing.yml"
           ref: ${{ github.ref_name }}
           inputs:
-            staging_url: "${{ steps.deploy.outputs.page_url }}"
+            staging_url: ${{ env.STAGING_URL }}
 
   approve_and_deploy_prod:
     needs: deploy_staging
