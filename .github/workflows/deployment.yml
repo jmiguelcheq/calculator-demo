@@ -537,6 +537,7 @@ jobs:
   package_site:
     needs: remote_tests
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
       # (add build steps here if your site is generated)
@@ -549,6 +550,7 @@ jobs:
   deploy_staging:
     needs: package_site
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     environment: staging
     outputs:
       preview_url: ${{ steps.deploy.outputs.page_url }}
@@ -561,6 +563,7 @@ jobs:
   approve_and_deploy_prod:
     needs: deploy_staging
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     environment:
       name: production        # add approvers in Settings → Environments → production
       url: ${{ needs.deploy_staging.outputs.preview_url }}
