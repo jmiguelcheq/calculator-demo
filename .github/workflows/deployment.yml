@@ -10,7 +10,7 @@ permissions:
   pages: write
   id-token: write
   actions: write
-  statuses: write        # set commit status on push (optional but nice)
+  statuses: write
 
 concurrency:
   group: "pages-deploy"
@@ -113,7 +113,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # (add build steps if needed)
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
