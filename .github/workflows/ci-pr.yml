@@ -1,4 +1,4 @@
-name: PR CI (remote UI tests via repository_dispatch)
+name: Run Test on PR
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/github-script@v7
         env:
           TARGET_OWNER: "jmiguelcheq"
-          TARGET_REPO: "calculator-test-demo"  # testing repo
+          TARGET_REPO: "calculator-test-demo"
           CALC_URL: "https://jmiguelcheq.github.io/calculator-demo"
         with:
           github-token: ${{ secrets.CI_PAT }}  # PAT with repo+workflow scopes, access to testing repo
