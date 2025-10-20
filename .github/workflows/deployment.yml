@@ -1,4 +1,4 @@
-name: Deploy on main (gated by remote tests)
+name: Deploy on Staging + Production(with approval)
 
 on:
   push:
