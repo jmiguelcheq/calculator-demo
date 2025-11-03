@@ -34,6 +34,7 @@ jobs:
             const payload = {
               calc_url: CALC_URL,
               source_repo: `${context.repo.owner}/${context.repo.repo}`,
+              env: 'staging',
               sha: context.sha,
               ref: (context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', ''))
             };
