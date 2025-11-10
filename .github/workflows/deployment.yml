@@ -134,7 +134,6 @@ jobs:
           path: src
 
   deploy_staging:
-    # Deploy the built artifact to calculator-demo-staging (gh-pages)
     needs: package_site
     runs-on: ubuntu-latest
     environment:
@@ -142,11 +141,18 @@ jobs:
       url: https://jmiguelcheq.github.io/calculator-demo-staging/
 
     steps:
-      - name: Download site artifact
+      - name: Download Pages artifact
         uses: actions/download-artifact@v4
         with:
           name: github-pages
           path: site
+
+      - name: Extract artifact
+        run: |
+          set -e
+          # Extract the Pages artifact contents into ./site
+          tar -xf site/artifact.tar -C site
+          rm site/artifact.tar
 
       - name: Checkout staging repo (gh-pages)
         uses: actions/checkout@v4
@@ -156,15 +162,15 @@ jobs:
           token: ${{ secrets.CI_PAT }}
           path: staging
 
-      - name: Sync artifact to staging gh-pages
+      - name: Sync artifact contents to staging gh-pages
         run: |
           set -e
           cd staging
 
-          # Remove everything except .git
+          # Clean everything except .git
           find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 
-          # Copy new site content
+          # Copy extracted site files into repo root
           cp -R ../site/* .
 
           git config user.name "github-actions[bot]"
