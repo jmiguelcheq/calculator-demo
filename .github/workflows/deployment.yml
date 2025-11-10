@@ -1,4 +1,4 @@
-name: Deploy on Staging + Production(with approval)
+name: Deploy on Staging + Production (with approval)
 
 on:
   push:
@@ -20,6 +20,7 @@ jobs:
   remote_tests:
     name: Run tests in testing repo and wait
     runs-on: ubuntu-latest
+
     steps:
       - name: Send repository_dispatch to testing repo
         id: send_remote_tests
@@ -41,8 +42,10 @@ jobs:
               ref: context.ref.replace('refs/heads/', '')
             };
             await github.rest.repos.createDispatchEvent({
-              owner: TARGET_OWNER, repo: TARGET_REPO,
-              event_type: 'run-tests', client_payload: payload
+              owner: TARGET_OWNER,
+              repo: TARGET_REPO,
+              event_type: 'run-tests',
+              client_payload: payload
             });
             core.info(`repository_dispatch sent with payload: ${JSON.stringify(payload)}`);
             core.setOutput('dispatched_at', dispatchedAt);
@@ -59,14 +62,17 @@ jobs:
           script: |
             const { TARGET_OWNER, TARGET_REPO, DISPATCHED_AT } = process.env;
             const workflow_id = 'on-dispatch-tests.yml';
-            const deadline = Date.now() + 20 * 60 * 1000;
+            const deadline = Date.now() + 20 * 60 * 1000; // 20 min
             const dispatchedAtMs = Date.parse(DISPATCHED_AT);
 
             let runId = null, matched = null;
             while (Date.now() < deadline) {
               const runs = await github.rest.actions.listWorkflowRuns({
-                owner: TARGET_OWNER, repo: TARGET_REPO,
-                workflow_id, event: 'repository_dispatch', per_page: 20
+                owner: TARGET_OWNER,
+                repo: TARGET_REPO,
+                workflow_id,
+                event: 'repository_dispatch',
+                per_page: 20
               });
               matched = runs.data.workflow_runs.find(r => Date.parse(r.created_at) >= dispatchedAtMs);
               if (matched) { runId = matched.id; core.info(`Matched run: ${runId}`); break; }
@@ -77,7 +83,9 @@ jobs:
             let run;
             while (Date.now() < deadline) {
               const res = await github.rest.actions.getWorkflowRun({
-                owner: TARGET_OWNER, repo: TARGET_REPO, run_id: runId
+                owner: TARGET_OWNER,
+                repo: TARGET_REPO,
+                run_id: runId
               });
               run = res.data;
               core.info(`status=${run.status}, conclusion=${run.conclusion}`);
@@ -103,8 +111,11 @@ jobs:
           script: |
             const state = (process.env.CONCLUSION === 'success') ? 'success' : 'failure';
             await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner, repo: context.repo.repo, sha: context.sha,
-              state, context: 'Test Results',
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              context: 'Test Results',
               target_url: process.env.RUN_URL || undefined,
               description: state === 'success' ? 'Tests passed' : 'Tests failed'
             });
@@ -112,30 +123,69 @@ jobs:
   package_site:
     needs: remote_tests
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
+      # Package the static site from /src as Pages artifact
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
           path: src
 
   deploy_staging:
+    # Deploy the built artifact to calculator-demo-staging (gh-pages)
     needs: package_site
     runs-on: ubuntu-latest
-    environment: staging
-    outputs:
-      preview_url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages (Staging)
-        id: deploy
-        uses: actions/deploy-pages@v4
+    environment:
+      name: staging
+      url: https://jmiguelcheq.github.io/calculator-demo-staging/
 
-  approve_and_deploy_prod:
-    needs: deploy_staging
+    steps:
+      - name: Download site artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          path: site
+
+      - name: Checkout staging repo (gh-pages)
+        uses: actions/checkout@v4
+        with:
+          repository: jmiguelcheq/calculator-demo-staging
+          ref: gh-pages
+          token: ${{ secrets.CI_PAT }}
+          path: staging
+
+      - name: Sync artifact to staging gh-pages
+        run: |
+          set -e
+          cd staging
+
+          # Remove everything except .git
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+
+          # Copy new site content
+          cp -R ../site/* .
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git status --porcelain | grep .; then
+            git add .
+            git commit -m "Deploy staging from ${GITHUB_SHA}"
+            git push origin gh-pages
+          else
+            echo "No changes to deploy to staging."
+          fi
+
+  deploy_production:
+    # Manual approval happens via protected 'production' environment in repo settings
+    needs: [package_site, deploy_staging]
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ needs.deploy_staging.outputs.preview_url }}
+      url: https://jmiguelcheq.github.io/calculator-demo/
+
     steps:
       - name: Deploy to GitHub Pages (Production)
         uses: actions/deploy-pages@v4
