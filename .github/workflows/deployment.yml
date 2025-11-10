@@ -150,27 +150,26 @@ jobs:
       - name: Extract artifact
         run: |
           set -e
-          # Extract the Pages artifact contents into ./site
           tar -xf site/artifact.tar -C site
           rm site/artifact.tar
 
-      - name: Checkout staging repo (gh-pages)
+      - name: Checkout staging repo (main)
         uses: actions/checkout@v4
         with:
           repository: jmiguelcheq/calculator-demo-staging
-          ref: gh-pages
+          ref: main
           token: ${{ secrets.CI_PAT }}
           path: staging
 
-      - name: Sync artifact contents to staging gh-pages
+      - name: Sync artifact contents to staging (main branch root)
         run: |
           set -e
           cd staging
 
-          # Clean everything except .git
+          # Remove everything except .git
           find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 
-          # Copy extracted site files into repo root
+          # Copy extracted site content into repo root
           cp -R ../site/* .
 
           git config user.name "github-actions[bot]"
@@ -179,7 +178,7 @@ jobs:
           if git status --porcelain | grep .; then
             git add .
             git commit -m "Deploy staging from ${GITHUB_SHA}"
-            git push origin gh-pages
+            git push origin main
           else
             echo "No changes to deploy to staging."
           fi
