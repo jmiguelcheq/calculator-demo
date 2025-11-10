@@ -1,4 +1,4 @@
-name: Deploy on Staging + Production (with approval)
+name: Deploy on Staging (automatic) + Production (with approval)
 
 on:
   push:
@@ -127,7 +127,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Package the static site from /src as Pages artifact
       - name: Upload Pages artifact (static site)
         uses: actions/upload-pages-artifact@v3
         with:
@@ -161,13 +160,15 @@ jobs:
           token: ${{ secrets.CI_PAT }}
           path: staging
 
-      - name: Sync artifact contents to staging (main branch root)
+      - name: Sync artifact contents to staging
         run: |
           set -e
           cd staging
 
-          # Remove everything except .git
-          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name '.git' \
+            ! -name 'README.md' \
+            -exec rm -rf {} +
 
           # Copy extracted site content into repo root
           cp -R ../site/* .
