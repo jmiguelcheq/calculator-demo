@@ -34,7 +34,7 @@ jobs:
             const payload = {
               calc_url: CALC_URL,
               source_repo: `${context.repo.owner}/${context.repo.repo}`,
-              env: 'staging',
+              env: 'pr',
               sha: context.sha,
               ref: (context.payload.pull_request?.head?.ref || context.ref.replace('refs/heads/', ''))
             };
@@ -115,25 +115,25 @@ jobs:
         if: ${{ always() && steps.wait_remote_tests.outputs.conclusion != 'success' }}
         uses: actions/github-script@v7
         env:
-            RUN_URL: ${{ steps.wait_remote_tests.outputs.run_url }}
-            CONCLUSION: ${{ steps.wait_remote_tests.outputs.conclusion }}
+          RUN_URL: ${{ steps.wait_remote_tests.outputs.run_url }}
+          CONCLUSION: ${{ steps.wait_remote_tests.outputs.conclusion }}
         with:
-            github-token: ${{ secrets.GITHUB_TOKEN }}
-            script: |
-                const runUrl = process.env.RUN_URL;
-                const conclusion = (process.env.CONCLUSION || 'failure').toUpperCase();
-                const prNumber = context.payload.pull_request?.number;
-                if (!prNumber) { core.info('No PR found to comment on.'); return; }
-                const body = [
-                    '🚨 **Automation tests failed** for this PR.',
-                    '',
-                    `Report & logs: ${runUrl}`,
-                    '',
-                    `> Conclusion: **${conclusion}**`
-                ].join('\n');
-                await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: prNumber,
-                    body
-                });
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const runUrl = process.env.RUN_URL;
+            const conclusion = (process.env.CONCLUSION || 'failure').toUpperCase();
+            const prNumber = context.payload.pull_request?.number;
+            if (!prNumber) { core.info('No PR found to comment on.'); return; }
+            const body = [
+              '🚨 **Automation tests failed** for this PR.',
+              '',
+              `Report & logs: ${runUrl}`,
+              '',
+              `> Conclusion: **${conclusion}**`
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body
+            });
