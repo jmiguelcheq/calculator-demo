@@ -101,6 +101,7 @@ jobs:
             const payload = {
               calc_url: process.env.STAGING_URL,
               environment: 'staging',
+              mode: 'staging-smoke',
               source_repo: `${context.repo.owner}/${context.repo.repo}`,
               sha: context.sha,
               ref: context.ref.replace('refs/heads/', '')
